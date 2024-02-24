@@ -3,6 +3,13 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from langchain.chat_models.gigachat import GigaChat
+from langchain.schema import HumanMessage, SystemMessage
+
+llm = GigaChat(
+  verify_ssl_certs=False,
+  scope="GIGACHAT_API_PERS",
+  credentials="...")
 
 API_TOKEN = '6646127537:AAEa-erni0KflNBwLICNJByogiuUc0T3pqo'
 
@@ -17,67 +24,104 @@ dp = Dispatcher(bot, storage=storage)
 
 # Определяем состояния текста, в которых находится пользователь
 class TextStates(StatesGroup):
-    INPUT_REG = State()  # Запрос регистрации
-    INPUT_NAME = State()  # Запрос имени пользователя
-    INPUT_AGE = State()  # Запрос возраста пользователя
+    INPUT_DIALOG1 = State()
+    INPUT_DIALOG2 = State()
+    INPUT_DIALOG3 = State()
     START = State()  # Стартовое состояние
     FINISH = State()
 
 # Обработчик команды /start
+
+
 @dp.message_handler(commands=['start'])
 async def process_start_command(message: types.Message):
-    await message.reply("Привет! Я бот. Могу вас зарегистрировать:\n 1. Я зарегистрирован. \n 2. Зарегистрироваться")
+    await message.reply("Привет! Я бот gigachat. Люблю болтать, с какой частью меня вы хотите поговорить?"
+                        "\n 1. Компьютерный мастер. \n 2. Человек-паук \n 3. Знаток Лиги Легенд.")
 
     # Переход в стартовое состояние
     await TextStates.START.set()
 
+
 @dp.message_handler(commands=['1'], state=TextStates.START)
 async def finish(message: types.Message, state: FSMContext):
-    await message.reply("В таком случае вы зарегистрированы! Удачи!")
+    await message.reply("Напиши свой вопрос, или напиши 404, чтобы выйти из диалога")
+    await TextStates.INPUT_DIALOG1.set()
 
-    # Завершаем состояние
-    await state.finish()
+
+@dp.message_handler(state=TextStates.INPUT_DIALOG1)
+async def finish(message: types.Message, state: FSMContext):
+        messages = [
+            SystemMessage(
+                content="Ты компьютерный мастер!"
+            )
+        ]
+        dialog = message.text
+        if dialog == "404":
+            await message.reply("Привет! Я бот gigachat. Люблю болтать, с какой частью меня вы хотите поговорить?"
+                                "\n 1. Компьютерный мастер. \n 2. Человек-паук \n 3. Знаток Лиги Легенд.")
+            await TextStates.START.set()
+        else:
+            messages.append(HumanMessage(content=dialog))
+            res = llm(messages)
+            messages.append(res)
+            await message.reply(res.content)
+            await message.reply("Напиши свой вопрос, или напиши 404, чтобы выйти из диалога")
+            await TextStates.INPUT_DIALOG1.set()
 
 
 @dp.message_handler(commands=['2'], state=TextStates.START)
-async def process_reg_command(message: types.Message):
-    await message.reply("Сейчас зарегистрируем! Напишите своё имя!")
-
-    #Устанавливаем состояние ввода имени
-    await TextStates.INPUT_NAME.set()
+async def finish(message: types.Message, state: FSMContext):
+    await message.reply("Напиши свой вопрос, или напиши 404, чтобы выйти из диалога")
+    await TextStates.INPUT_DIALOG2.set()
 
 
+@dp.message_handler(state=TextStates.INPUT_DIALOG2)
+async def finish(message: types.Message, state: FSMContext):
+        messages = [
+            SystemMessage(
+                content="Ты человек-паук!"
+            )
+        ]
+        dialog = message.text
+        if dialog == "404":
+            await message.reply("Привет! Я бот gigachat. Люблю болтать, с какой частью меня вы хотите поговорить?"
+                                "\n 1. Компьютерный мастер. \n 2. Человек-паук \n 3. Знаток Лиги Легенд.")
+            await TextStates.START.set()
+        else:
+            messages.append(HumanMessage(content=dialog))
+            res = llm(messages)
+            messages.append(res)
+            await message.reply(res.content)
+            await message.reply("Напиши свой вопрос, или напиши 404, чтобы выйти из диалога")
+            await TextStates.INPUT_DIALOG2.set()
 
-# Обработчик состояния ввода имени
-@dp.message_handler(state=TextStates.INPUT_NAME)
-async def process_input_name_state(message: types.Message, state: FSMContext):
-    name = message.text
-    await state.update_data(name=name)  # Сохраняем имя пользователя
 
 
-    await message.reply("Отлично! Теперь напиши свой возраст.")
+@dp.message_handler(commands=['3'], state=TextStates.START)
+async def finish(message: types.Message, state: FSMContext):
+    await message.reply("Напиши свой вопрос, или напиши 404, чтобы выйти из диалога")
+    await TextStates.INPUT_DIALOG3.set()
 
-    await TextStates.INPUT_AGE.set()
 
-
-# Обработчик состояния ввода возраста
-@dp.message_handler(state=TextStates.INPUT_AGE)
-async def process_input_age_state(message: types.Message, state: FSMContext):
-    age = message.text
-
-    # Получаем имя из сохраненных данных состояния
-    data = await state.get_data()
-    name = data['name']
-    try:
-        isinstance(int(age), int)
-        await message.reply(f"Спасибо, {name}! Твой возраст - {age}.")
-
-        await message.reply("Вы зарегистрированы! Удачи!")
-        # Завершаем состояние
-        await state.finish()
-    except ValueError as a:
-        await message.reply("Ошибка! Введите возраст ещё раз, пожалуйста.")
-        await TextStates.INPUT_AGE.set()
+@dp.message_handler(state=TextStates.INPUT_DIALOG3)
+async def finish(message: types.Message, state: FSMContext):
+        messages = [
+            SystemMessage(
+                content="Ты знаток Лиги Легенд!"
+            )
+        ]
+        dialog = message.text
+        if dialog == "404":
+            await message.reply("Привет! Я бот gigachat. Люблю болтать, с какой частью меня вы хотите поговорить?"
+                                "\n 1. Компьютерный мастер. \n 2. Человек-паук \n 3. Знаток Лиги Легенд.")
+            await TextStates.START.set()
+        else:
+            messages.append(HumanMessage(content=dialog))
+            res = llm(messages)
+            messages.append(res)
+            await message.reply(res.content)
+            await message.reply("Напиши свой вопрос, или напиши 404, чтобы выйти из диалога")
+            await TextStates.INPUT_DIALOG3.set()
 
 
 # Обработчик неизвестных команд
